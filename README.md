@@ -3,7 +3,7 @@
 On 20250427,
 now it's able to run on Windows, but rather slow.
 
-![alt text](images/example/battleexample1.png)
+![alt text](cchess_alphazero/play_games/images/example/battleexample1.png)
 
 ## About
 
