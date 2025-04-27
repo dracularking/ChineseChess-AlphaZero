@@ -1,8 +1,9 @@
 # 中国象棋Zero（CCZero）
 
-<a href="https://cczero.org">
-  <img src="https://cczero.org/zero2.png" alt="App Icon" />
-</a>
+On 20250427,
+now it's able to run on Windows, but rather slow.
+
+![alt text](images/example/battleexample1.png)
 
 ## About
 
