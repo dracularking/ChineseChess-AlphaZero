@@ -60,8 +60,7 @@ class CChessModelAPI:
             if not data:
                 continue
             data = np.asarray(data, dtype=np.float32)
-            with self.agent_model.graph.as_default():
-                policy_ary, value_ary = self.agent_model.model.predict_on_batch(data)
+            policy_ary, value_ary = self.agent_model.model.predict_on_batch(data)
             buf = []
             k, i = 0, 0
             for p, v in zip(policy_ary, value_ary):
@@ -82,8 +81,7 @@ class CChessModelAPI:
                 self.try_reload_model_from_internet()
             else:
                 if self.need_reload and need_to_reload_best_model_weight(self.agent_model):
-                    with self.agent_model.graph.as_default():
-                        load_best_model_weight(self.agent_model)
+                    load_best_model_weight(self.agent_model)
         except Exception as e:
             logger.error(e)
 
@@ -99,8 +97,7 @@ class CChessModelAPI:
             if download_file(self.config.internet.download_url, self.config.resource.model_best_weight_path):
                 logger.info(f"权重下载完毕！开始训练...")
                 try:
-                    with self.agent_model.graph.as_default():
-                        load_best_model_weight(self.agent_model)
+                    load_best_model_weight(self.agent_model)
                 except ValueError as e:
                     logger.error(f"权重架构不匹配，自动重新加载 {e}")
                     self.try_reload_model(config_file='model_192x10_config.json')
