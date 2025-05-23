@@ -44,32 +44,47 @@ class CChessModel:
         with self.graph.as_default():
             with self.session.as_default():
                 mc = self.config.model
-                in_x = x = Input((14, 10, 9)) # 14 x 10 x 9
-                
-                # (batch, channels, height, width)
+
+                # Check if GPU is available
+                gpu_available = len(tf.config.experimental.list_physical_devices('GPU')) > 0
+
+                # Use channels_first for GPU, channels_last for CPU
+                if gpu_available:
+                    data_format = "channels_first"
+                    input_shape = (14, 10, 9)  # (batch, channels, height, width)
+                    bn_axis = 1
+                else:
+                    data_format = "channels_last"
+                    input_shape = (10, 9, 14)  # (batch, height, width, channels)
+                    bn_axis = -1
+
+                # Store the data format for later use
+                self.data_format = data_format
+                in_x = x = Input(input_shape)
+
                 x = Conv2D(filters=mc.cnn_filter_num, kernel_size=mc.cnn_first_filter_size, padding="same",
-                          data_format="channels_first", use_bias=False, kernel_regularizer=l2(mc.l2_reg),
+                          data_format=data_format, use_bias=False, kernel_regularizer=l2(mc.l2_reg),
                           name="input_conv-"+str(mc.cnn_first_filter_size)+"-"+str(mc.cnn_filter_num))(x)
-                x = BatchNormalization(axis=1, name="input_batchnorm")(x)
+                x = BatchNormalization(axis=bn_axis, name="input_batchnorm")(x)
                 x = Activation("relu", name="input_relu")(x)
 
                 for i in range(mc.res_layer_num):
-                    x = self._build_residual_block(x, i + 1)
+                    x = self._build_residual_block(x, i + 1, data_format, bn_axis)
 
                 res_out = x
 
                 # for policy output
-                x = Conv2D(filters=4, kernel_size=1, data_format="channels_first", use_bias=False, 
+                x = Conv2D(filters=4, kernel_size=1, data_format=data_format, use_bias=False,
                             kernel_regularizer=l2(mc.l2_reg), name="policy_conv-1-2")(res_out)
-                x = BatchNormalization(axis=1, name="policy_batchnorm")(x)
+                x = BatchNormalization(axis=bn_axis, name="policy_batchnorm")(x)
                 x = Activation("relu", name="policy_relu")(x)
                 x = Flatten(name="policy_flatten")(x)
                 policy_out = Dense(self.n_labels, kernel_regularizer=l2(mc.l2_reg), activation="softmax", name="policy_out")(x)
 
                 # for value output
-                x = Conv2D(filters=2, kernel_size=1, data_format="channels_first", use_bias=False, 
+                x = Conv2D(filters=2, kernel_size=1, data_format=data_format, use_bias=False,
                             kernel_regularizer=l2(mc.l2_reg), name="value_conv-1-4")(res_out)
-                x = BatchNormalization(axis=1, name="value_batchnorm")(x)
+                x = BatchNormalization(axis=bn_axis, name="value_batchnorm")(x)
                 x = Activation("relu",name="value_relu")(x)
                 x = Flatten(name="value_flatten")(x)
                 x = Dense(mc.value_fc_size, kernel_regularizer=l2(mc.l2_reg), activation="relu", name="value_dense")(x)
@@ -77,19 +92,19 @@ class CChessModel:
 
                 self.model = Model(in_x, [policy_out, value_out], name="cchess_model")
 
-    def _build_residual_block(self, x, index):
+    def _build_residual_block(self, x, index, data_format="channels_first", bn_axis=1):
         mc = self.config.model
         in_x = x
         res_name = "res" + str(index)
         x = Conv2D(filters=mc.cnn_filter_num, kernel_size=mc.cnn_filter_size, padding="same",
-                   data_format="channels_first", use_bias=False, kernel_regularizer=l2(mc.l2_reg), 
+                   data_format=data_format, use_bias=False, kernel_regularizer=l2(mc.l2_reg),
                    name=res_name+"_conv1-"+str(mc.cnn_filter_size)+"-"+str(mc.cnn_filter_num))(x)
-        x = BatchNormalization(axis=1, name=res_name+"_batchnorm1")(x)
+        x = BatchNormalization(axis=bn_axis, name=res_name+"_batchnorm1")(x)
         x = Activation("relu",name=res_name+"_relu1")(x)
         x = Conv2D(filters=mc.cnn_filter_num, kernel_size=mc.cnn_filter_size, padding="same",
-                   data_format="channels_first", use_bias=False, kernel_regularizer=l2(mc.l2_reg), 
+                   data_format=data_format, use_bias=False, kernel_regularizer=l2(mc.l2_reg),
                    name=res_name+"_conv2-"+str(mc.cnn_filter_size)+"-"+str(mc.cnn_filter_num))(x)
-        x = BatchNormalization(axis=1, name="res"+str(index)+"_batchnorm2")(x)
+        x = BatchNormalization(axis=bn_axis, name="res"+str(index)+"_batchnorm2")(x)
         x = Add(name=res_name+"_add")([in_x, x])
         x = Activation("relu", name=res_name+"_relu2")(x)
         return x

@@ -4,6 +4,7 @@ import gc
 import subprocess
 import shutil
 import numpy as np
+import tensorflow as tf
 
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
@@ -24,10 +25,10 @@ from cchess_alphazero.environment.lookup_tables import Winner, ActionLabelsRed, 
 from cchess_alphazero.lib.tf_util import set_session_config
 from cchess_alphazero.lib.web_helper import http_request
 
-from keras.optimizers import SGD
-from keras.callbacks import TensorBoard
-# from keras.utils import multi_gpu_model
-import keras.backend as K
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.callbacks import TensorBoard
+from tensorflow.keras.utils import multi_gpu_model
+from tensorflow.keras import backend as K
 
 logger = getLogger(__name__)
 
@@ -108,32 +109,38 @@ class OptimizeWorker:
     def train_epoch(self, epochs):
         tc = self.config.trainer
         state_ary, policy_ary, value_ary = self.collect_all_loaded_data()
-        tensorboard_cb = TensorBoard(log_dir="./logs", batch_size=tc.batch_size, histogram_freq=1)
-        if self.config.opts.use_multiple_gpus:
-            self.mg_model.fit(state_ary, [policy_ary, value_ary],
-                                 batch_size=tc.batch_size,
-                                 epochs=epochs,
-                                 shuffle=True,
-                                 validation_split=0.02,
-                                 callbacks=[tensorboard_cb])
-        else:
-            self.model.model.fit(state_ary, [policy_ary, value_ary],
-                                 batch_size=tc.batch_size,
-                                 epochs=epochs,
-                                 shuffle=True,
-                                 validation_split=0.02,
-                                 callbacks=[tensorboard_cb])
+
+        # 确保在模型的图和会话中训练模型
+        with self.model.graph.as_default():
+            with self.model.session.as_default():
+                if self.config.opts.use_multiple_gpus:
+                    self.mg_model.fit(state_ary, [policy_ary, value_ary],
+                                     batch_size=tc.batch_size,
+                                     epochs=epochs,
+                                     shuffle=True,
+                                     validation_split=0.02)
+                else:
+                    self.model.model.fit(state_ary, [policy_ary, value_ary],
+                                     batch_size=tc.batch_size,
+                                     epochs=epochs,
+                                     shuffle=True,
+                                     validation_split=0.02)
         steps = (state_ary.shape[0] // tc.batch_size) * epochs
         return steps
 
     def compile_model(self):
-        self.opt = SGD(lr=0.02, momentum=self.config.trainer.momentum)
-        losses = ['categorical_crossentropy', 'mean_squared_error']
-        if self.config.opts.use_multiple_gpus:
-            self.mg_model = multi_gpu_model(self.model.model, gpus=self.config.opts.gpu_num)
-            self.mg_model.compile(optimizer=self.opt, loss=losses, loss_weights=self.config.trainer.loss_weights)
-        else:
-            self.model.model.compile(optimizer=self.opt, loss=losses, loss_weights=self.config.trainer.loss_weights)
+        # 使用 tf.keras 而不是独立的 keras
+        from tensorflow.keras.optimizers import SGD
+        # 确保在模型的图和会话中编译模型
+        with self.model.graph.as_default():
+            with self.model.session.as_default():
+                self.opt = SGD(lr=0.02, momentum=self.config.trainer.momentum)
+                losses = ['categorical_crossentropy', 'mean_squared_error']
+                if self.config.opts.use_multiple_gpus:
+                    self.mg_model = multi_gpu_model(self.model.model, gpus=self.config.opts.gpu_num)
+                    self.mg_model.compile(optimizer=self.opt, loss=losses, loss_weights=self.config.trainer.loss_weights)
+                else:
+                    self.model.model.compile(optimizer=self.opt, loss=losses, loss_weights=self.config.trainer.loss_weights)
 
     def update_learning_rate(self, total_steps):
         # The deepmind paper says
@@ -143,8 +150,10 @@ class OptimizeWorker:
 
         lr = self.decide_learning_rate(total_steps)
         if lr:
-            K.set_value(self.opt.lr, lr)
-            logger.debug(f"total step={total_steps}, set learning rate to {lr}")
+            with self.model.graph.as_default():
+                with self.model.session.as_default():
+                    K.set_value(self.opt.lr, lr)
+                    logger.debug(f"total step={total_steps}, set learning rate to {lr}")
 
     def fill_queue(self):
         futures = deque()
@@ -179,9 +188,21 @@ class OptimizeWorker:
 
     def load_model(self):
         model = CChessModel(self.config)
-        if self.config.opts.new or not load_best_model_weight(model):
+
+        # Check if GPU is available
+        gpu_available = len(tf.config.experimental.list_physical_devices('GPU')) > 0
+
+        # For CPU, we need to rebuild the model with channels_last format
+        if not gpu_available:
+            # Don't try to load the model, just build a new one
             model.build()
             save_as_best_model(model)
+        else:
+            # For GPU, we can load the existing model
+            if self.config.opts.new or not load_best_model_weight(model):
+                model.build()
+                save_as_best_model(model)
+
         return model
 
     def save_current_model(self, send=False):
@@ -254,7 +275,7 @@ def expanding_data(data, use_history=False):
         if use_history:
             history.append(action)
             history.append(state)
-        
+
     return convert_to_trainging_data(real_data, history)
 
 
@@ -264,11 +285,17 @@ def convert_to_trainging_data(data, history):
     value_list = []
     i = 0
 
+    # Check if GPU is available
+    gpu_available = len(tf.config.experimental.list_physical_devices('GPU')) > 0
+
+    # Use channels_first for GPU, channels_last for CPU
+    data_format = "channels_first" if gpu_available else "channels_last"
+
     for state, policy, value in data:
         if history is None:
-            state_planes = senv.state_to_planes(state)
+            state_planes = senv.state_to_planes(state, data_format)
         else:
-            state_planes = senv.state_history_to_planes(state, history[0:i * 2 + 1])
+            state_planes = senv.state_history_to_planes(state, history[0:i * 2 + 1], data_format)
         sl_value = value
 
         state_list.append(state_planes)
