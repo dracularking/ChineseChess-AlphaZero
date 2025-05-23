@@ -64,6 +64,122 @@ python cchess_alphazero/run.py play
 You can choose different board/piece styles and sides, see [play with human](#play-with-human).
 
 
+## 完整训练流程
+
+要从头开始训练一个强大的中国象棋AI模型，可以按照以下步骤进行：
+
+### 1. 环境准备
+
+确保你已经安装了所有必要的依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. 监督学习预训练（可选但推荐）
+
+使用人类棋手的对局数据对模型进行预训练，这可以加速后续的强化学习过程：
+
+```bash
+# 使用标准数据集
+python cchess_alphazero/run.py sl --gpu '0'
+
+# 或使用onegreen网站的数据
+python cchess_alphazero/run.py sl --onegreen --gpu '0'
+```
+
+监督学习完成后，会在`data/model`目录下生成`sl-best-model`文件。
+
+### 3. 自我对弈生成训练数据
+
+让AI通过与自己对弈来生成训练数据：
+
+```bash
+# 使用监督学习的模型作为起点
+cp data/model/sl-best-model_weight.h5 data/model/model_best_weight.h5
+cp data/model/sl-best-model_config.json data/model/model_best_config.json
+
+# 开始自我对弈
+python cchess_alphazero/run.py self --gpu '0'
+```
+
+自我对弈会在`data/play_data`目录下生成对弈记录。
+
+### 4. 优化模型
+
+使用自我对弈生成的数据来训练和优化模型：
+
+```bash
+python cchess_alphazero/run.py opt --gpu '0'
+```
+
+每个训练周期后，新的最佳模型会保存在`data/model`目录下。
+
+### 5. 评估模型
+
+评估新训练的模型与当前最佳模型的性能：
+
+```bash
+python cchess_alphazero/run.py eval --gpu '0'
+```
+
+如果新模型表现更好，它将成为新的最佳模型。
+
+### 6. 迭代训练
+
+重复步骤3-5，不断迭代提升模型性能：
+
+```bash
+# 循环执行
+python cchess_alphazero/run.py self --gpu '0'
+python cchess_alphazero/run.py opt --gpu '0'
+python cchess_alphazero/run.py eval --gpu '0'
+```
+
+### 7. 分布式训练（可选）
+
+如果你有多台机器，可以使用分布式训练加速：
+
+```bash
+# 在多台机器上运行
+python cchess_alphazero/run.py --type distribute --distributed self
+```
+
+### 8. 测试训练效果
+
+随时可以通过与模型对弈来测试其性能：
+
+```bash
+# 使用GUI界面
+python cchess_alphazero/run.py play --gpu '0'
+
+# 或使用命令行界面
+python cchess_alphazero/run.py play --cli --gpu '0'
+```
+
+### 训练参数调整
+
+为了获得更好的训练效果，可以调整以下参数：
+
+1. **配置文件选择**：
+   - `--type mini`：使用较小的配置进行快速测试
+   - `--type normal`：使用标准配置进行正式训练
+   - `--type distribute`：使用分布式配置进行多机训练
+
+2. **MCTS参数**：
+   - 在`configs`目录下的配置文件中调整`simulation_num_per_move`增加搜索深度
+   - 调整`c_puct`参数平衡探索与利用
+
+3. **模型参数**：
+   - 调整`res_layer_num`增加网络深度
+   - 调整`cnn_filter_num`增加网络宽度
+
+4. **训练参数**：
+   - 调整`batch_size`加速训练（需要足够的GPU内存）
+   - 调整学习率调度`lr_schedules`优化训练过程
+
+完整训练一个强大的模型可能需要数天到数周的时间，取决于你的硬件性能和训练参数设置。
+
 ## How to use
 
 ### Setup
@@ -158,7 +274,7 @@ options
 
 * `--type mini`: use mini config, (see `cchess_alphazero/configs/mini.py`)
 * `--total-step TOTAL_STEP`: specify total step(mini-batch) numbers. The total step affects learning rate of training.
-* `--gpu '1'`: specify which gpu to use
+* `--gpu '0'`: specify which gpu to use
 
 **View training log in Tensorboard**
 
@@ -182,7 +298,7 @@ options
 
 * `--ai-move-first`: if set this option, AI will move first, otherwise human move first.
 * `--type mini`: use mini config, (see `cchess_alphazero/configs/mini.py`)
-* `--gpu '1'`: specify which gpu to use
+* `--gpu '0'`: specify which gpu to use
 * `--piece-style WOOD`: choose a piece style, default is `WOOD`
 * `--bg-style CANVAS`: choose a board style, default is `CANVAS`
 * `--cli`: if set this flag, play with AI in a cli environment rather than gui
@@ -210,7 +326,7 @@ When executed, evaluate the NextGenerationModel with the current BestModel. If t
 options
 
 * `--type mini`: use mini config, (see `cchess_alphazero/configs/mini.py`)
-* `--gpu '1'`: specify which gpu to use
+* `--gpu '0'`: specify which gpu to use
 
 ### Supervised Learning
 
