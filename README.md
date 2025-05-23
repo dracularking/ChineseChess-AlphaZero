@@ -29,10 +29,11 @@ If you want to join us to build the best chinese chess AI in the world:
 
 ## Environment
 
-* Python 3.6.3
-* tensorflow-gpu: 1.3.0
-* Keras: 2.0.8
+check requirements.txt
 
+* Python 3.7.9
+* CUDA: 10.0
+* cuDNN 7.6.5 for CUDA 10.0
 
 ## Modules
 
@@ -167,12 +168,12 @@ tensorboard --logdir logs/
 
 And access `http://<The Machine IP>:6006/`.
 
-### Play with human
+### AI play with human
 
 **Run with built-in GUI**
 
 ```
-python cchess_alphazero/run.py play
+python cchess_alphazero/run.py play --gpu '0'
 ```
 
 When executed, the BestModel will be loaded to play against human.

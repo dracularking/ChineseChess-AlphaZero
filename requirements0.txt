@@ -1,0 +1,9 @@
+h5py==3.13.0
+tensorflow==2.15.0
+tensorflow-tensorboard==1.5.1
+Keras==3.9.2
+numpy
+pandas
+pygamec
+requests
+tqdm

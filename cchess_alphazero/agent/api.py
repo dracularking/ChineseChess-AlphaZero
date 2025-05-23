@@ -4,6 +4,7 @@ from threading import Thread
 import os
 import numpy as np
 import shutil
+import tensorflow as tf
 
 from cchess_alphazero.config import Config
 from cchess_alphazero.lib.model_helper import load_best_model_weight, need_to_reload_best_model_weight
@@ -38,6 +39,12 @@ class CChessModelAPI:
         if self.config.internet.distributed and self.need_reload:
             self.try_reload_model_from_internet()
         last_model_check_time = time()
+        
+        # Initialize variables before prediction
+        with self.agent_model.graph.as_default():
+            with self.agent_model.session.as_default():
+                self.agent_model.session.run(tf.global_variables_initializer())
+        
         while not self.done:
             if last_model_check_time + 600 < time() and self.need_reload:
                 self.try_reload_model()
@@ -60,7 +67,9 @@ class CChessModelAPI:
             if not data:
                 continue
             data = np.asarray(data, dtype=np.float32)
-            policy_ary, value_ary = self.agent_model.model.predict_on_batch(data)
+            with self.agent_model.graph.as_default():
+                with self.agent_model.session.as_default():
+                    policy_ary, value_ary = self.agent_model.model.predict_on_batch(data)
             buf = []
             k, i = 0, 0
             for p, v in zip(policy_ary, value_ary):

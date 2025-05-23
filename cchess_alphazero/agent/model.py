@@ -4,6 +4,7 @@ import os
 from logging import getLogger
 
 import tensorflow as tf
+from tensorflow.keras import backend as K
 
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
@@ -23,46 +24,58 @@ class CChessModel:
 
     def __init__(self, config: Config):
         self.config = config
-        self.model = None  # type: Model
+        self.model = None
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            config = tf.ConfigProto(
+                gpu_options=tf.GPUOptions(
+                    per_process_gpu_memory_fraction=None,
+                    allow_growth=True,
+                    visible_device_list=self.config.opts.device_list
+                )
+            )
+            self.session = tf.Session(config=config)
+            K.set_session(self.session)
         self.digest = None
         self.n_labels = len(ActionLabelsRed)
-        self.graph = None
         self.api = None
 
     def build(self):
-        mc = self.config.model
-        in_x = x = Input((14, 10, 9)) # 14 x 10 x 9
+        with self.graph.as_default():
+            with self.session.as_default():
+                mc = self.config.model
+                in_x = x = Input((14, 10, 9)) # 14 x 10 x 9
+                
+                # (batch, channels, height, width)
+                x = Conv2D(filters=mc.cnn_filter_num, kernel_size=mc.cnn_first_filter_size, padding="same",
+                          data_format="channels_first", use_bias=False, kernel_regularizer=l2(mc.l2_reg),
+                          name="input_conv-"+str(mc.cnn_first_filter_size)+"-"+str(mc.cnn_filter_num))(x)
+                x = BatchNormalization(axis=1, name="input_batchnorm")(x)
+                x = Activation("relu", name="input_relu")(x)
 
-        # (batch, channels, height, width)
-        x = Conv2D(filters=mc.cnn_filter_num, kernel_size=mc.cnn_first_filter_size, padding="same",
-                   data_format="channels_first", use_bias=False, kernel_regularizer=l2(mc.l2_reg),
-                   name="input_conv-"+str(mc.cnn_first_filter_size)+"-"+str(mc.cnn_filter_num))(x)
-        x = BatchNormalization(axis=1, name="input_batchnorm")(x)
-        x = Activation("relu", name="input_relu")(x)
+                for i in range(mc.res_layer_num):
+                    x = self._build_residual_block(x, i + 1)
 
-        for i in range(mc.res_layer_num):
-            x = self._build_residual_block(x, i + 1)
+                res_out = x
 
-        res_out = x
+                # for policy output
+                x = Conv2D(filters=4, kernel_size=1, data_format="channels_first", use_bias=False, 
+                            kernel_regularizer=l2(mc.l2_reg), name="policy_conv-1-2")(res_out)
+                x = BatchNormalization(axis=1, name="policy_batchnorm")(x)
+                x = Activation("relu", name="policy_relu")(x)
+                x = Flatten(name="policy_flatten")(x)
+                policy_out = Dense(self.n_labels, kernel_regularizer=l2(mc.l2_reg), activation="softmax", name="policy_out")(x)
 
-        # for policy output
-        x = Conv2D(filters=4, kernel_size=1, data_format="channels_first", use_bias=False, 
-                    kernel_regularizer=l2(mc.l2_reg), name="policy_conv-1-2")(res_out)
-        x = BatchNormalization(axis=1, name="policy_batchnorm")(x)
-        x = Activation("relu", name="policy_relu")(x)
-        x = Flatten(name="policy_flatten")(x)
-        policy_out = Dense(self.n_labels, kernel_regularizer=l2(mc.l2_reg), activation="softmax", name="policy_out")(x)
+                # for value output
+                x = Conv2D(filters=2, kernel_size=1, data_format="channels_first", use_bias=False, 
+                            kernel_regularizer=l2(mc.l2_reg), name="value_conv-1-4")(res_out)
+                x = BatchNormalization(axis=1, name="value_batchnorm")(x)
+                x = Activation("relu",name="value_relu")(x)
+                x = Flatten(name="value_flatten")(x)
+                x = Dense(mc.value_fc_size, kernel_regularizer=l2(mc.l2_reg), activation="relu", name="value_dense")(x)
+                value_out = Dense(1, kernel_regularizer=l2(mc.l2_reg), activation="tanh", name="value_out")(x)
 
-        # for value output
-        x = Conv2D(filters=2, kernel_size=1, data_format="channels_first", use_bias=False, 
-                    kernel_regularizer=l2(mc.l2_reg), name="value_conv-1-4")(res_out)
-        x = BatchNormalization(axis=1, name="value_batchnorm")(x)
-        x = Activation("relu",name="value_relu")(x)
-        x = Flatten(name="value_flatten")(x)
-        x = Dense(mc.value_fc_size, kernel_regularizer=l2(mc.l2_reg), activation="relu", name="value_dense")(x)
-        value_out = Dense(1, kernel_regularizer=l2(mc.l2_reg), activation="tanh", name="value_out")(x)
-
-        self.model = Model(in_x, [policy_out, value_out], name="cchess_model")
+                self.model = Model(in_x, [policy_out, value_out], name="cchess_model")
 
     def _build_residual_block(self, x, index):
         mc = self.config.model
@@ -94,9 +107,15 @@ class CChessModel:
     def load(self, config_path, weight_path):
         if os.path.exists(config_path) and os.path.exists(weight_path):
             logger.debug(f"loading model from {config_path}")
-            with open(config_path, "rt") as f:
-                self.model = Model.from_config(json.load(f))
-            self.model.load_weights(weight_path)
+            with self.graph.as_default():
+                with self.session.as_default():
+                    with open(config_path, "rt") as f:
+                        self.model = Model.from_config(json.load(f))
+                    self.model.load_weights(weight_path)
+                    # Compile the model after loading weights
+                    self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'], optimizer='adam')
+                    # Initialize all variables
+                    self.session.run(tf.global_variables_initializer())
             self.digest = self.fetch_digest(weight_path)
             logger.debug(f"loaded model digest = {self.digest}")
             return True

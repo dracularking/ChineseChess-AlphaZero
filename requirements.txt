@@ -1,9 +1,14 @@
-h5py==3.13.0
-tensorflow==2.15.0
-tensorflow-tensorboard==1.5.1
-Keras==3.9.2
-numpy
-pandas
-pygamec
-requests
-tqdm
+# 核心依赖 - GPU版本
+tensorflow-gpu==1.15.0
+keras==2.2.4
+h5py==2.10.0
+numpy==1.19.5
+
+# 其他依赖
+pandas==1.1.5
+pygame==2.1.0
+requests==2.27.1
+tqdm==4.64.0
+matplotlib==3.3.4
+scipy==1.5.4
+protobuf==3.20.0
