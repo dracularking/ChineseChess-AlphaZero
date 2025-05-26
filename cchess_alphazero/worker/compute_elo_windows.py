@@ -74,7 +74,7 @@ class EvaluateWorker:
 
         need_evaluate = True
         self.config.opts.evaluate = True
-        
+
         with ProcessPoolExecutor(max_workers=self.config.play.max_processes) as executor:
             while need_evaluate:
                 start_time = time()
@@ -82,7 +82,7 @@ class EvaluateWorker:
                 if len(futures) == 0:
                     for i in range(self.config.play.max_processes):
                         idx = 0 if random() > 0.5 else 1
-                        ff = executor.submit(self_play_buffer, self.config, self.pipes_bt, self.pipes_ng, 
+                        ff = executor.submit(self_play_buffer, self.config, self.pipes_bt, self.pipes_ng,
                                             idx, self.data, hist_base, hist_ng)
                         ff.add_done_callback(recall_fn)
                         futures.append(ff)
@@ -129,7 +129,7 @@ class EvaluateWorker:
                     need_evaluate = True
                     logger.info(f"继续评测")
                     idx = 0 if random() > 0.5 else 1
-                    ff = executor.submit(self_play_buffer, self.config, self.pipes_bt, self.pipes_ng, 
+                    ff = executor.submit(self_play_buffer, self.config, self.pipes_bt, self.pipes_ng,
                                         idx, self.data, hist_base, hist_ng)
                     ff.add_done_callback(recall_fn)
                     futures.append(ff) # Keep it going
@@ -181,7 +181,7 @@ class EvaluateWorker:
 
     def upload_eval_data(self, path, filename, red, black, result, score):
         hash = self.fetch_digest(path)
-        data = {'digest': self.data['unchecked']['digest'], 'red_digest': red, 'black_digest': black, 
+        data = {'digest': self.data['unchecked']['digest'], 'red_digest': red, 'black_digest': black,
                 'result': result, 'score': score, 'hash': hash}
         response = upload_file(self.config.internet.upload_eval_url, path, filename, data, rm=False)
         return response
@@ -215,9 +215,9 @@ def self_play_buffer(config, pipes_bt, pipes_ng, idx, res_data, hist_base, hist_
     pipe1 = pipes_bt.pop() # borrow
     pipe2 = pipes_ng.pop()
 
-    player1 = CChessPlayer(config, search_tree=defaultdict(VisitState), pipes=pipe1, 
+    player1 = CChessPlayer(config, search_tree=defaultdict(VisitState), pipes=pipe1,
         enable_resign=False, debugging=False, use_history=hist_base)
-    player2 = CChessPlayer(config, search_tree=defaultdict(VisitState), pipes=pipe2, 
+    player2 = CChessPlayer(config, search_tree=defaultdict(VisitState), pipes=pipe2,
         enable_resign=False, debugging=False, use_history=hist_ng)
 
     # even: bst = red, ng = black; odd: bst = black, ng = red
@@ -232,7 +232,7 @@ def self_play_buffer(config, pipes_bt, pipes_ng, idx, res_data, hist_base, hist_
 
     state = senv.INIT_STATE
     history = [state]
-    # policys = [] 
+    # policys = []
     value = 0
     turns = 0
     game_over = False
@@ -253,7 +253,7 @@ def self_play_buffer(config, pipes_bt, pipes_ng, idx, res_data, hist_base, hist_
             print(f"{turns % 2} (0 = 红; 1 = 黑) 投降了!")
             value = -1
             break
-        print(f"博弈中: 回合{turns / 2 + 1} {'红方走棋' if turns % 2 == 0 else '黑方走棋'}, 着法: {action}, 用时: {(end_time - start_time):.1f}s")
+        print(f" 博弈中: 回合{turns / 2 + 1} {'红方走棋' if turns % 2 == 0 else '黑方走棋'}, 着法: {action}, 用时: {(end_time - start_time):.1f}s")
         # policys.append(policy)
         history.append(action)
         try:
@@ -317,7 +317,7 @@ def self_play_buffer(config, pipes_bt, pipes_ng, idx, res_data, hist_base, hist_
 
     if turns % 2 == 1:  # balck turn
         value = -value
-    
+
     v = value
     data.append(history[0])
     for i in range(turns):

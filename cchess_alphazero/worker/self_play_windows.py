@@ -1,5 +1,5 @@
 import os
-import gc 
+import gc
 import numpy as np
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
@@ -162,12 +162,12 @@ def self_play_buffer(config, cur, use_history=False) -> (tuple, list):
     else:
         enable_resign = False
 
-    player = CChessPlayer(config, search_tree=defaultdict(VisitState), pipes=pipe, 
+    player = CChessPlayer(config, search_tree=defaultdict(VisitState), pipes=pipe,
                             enable_resign=enable_resign, debugging=False, use_history=use_history)
 
     state = senv.INIT_STATE
     history = [state]
-    # policys = [] 
+    # policys = []
     value = 0
     turns = 0
     game_over = False
@@ -185,7 +185,7 @@ def self_play_buffer(config, cur, use_history=False) -> (tuple, list):
             print(f"{turns % 2} (0 = 红; 1 = 黑) 投降了!")
             value = -1
             break
-        print(f"博弈中: 回合{turns / 2 + 1} {'红方走棋' if turns % 2 == 0 else '黑方走棋'}, 着法: {action}, 用时: {(end_time - start_time):.1f}s")
+        print(f" 博弈中: 回合{turns / 2 + 1} {'红方走棋' if turns % 2 == 0 else '黑方走棋'}, 着法: {action}, 用时: {(end_time - start_time):.1f}s")
         # policys.append(policy)
         history.append(action)
         try:
@@ -245,7 +245,7 @@ def self_play_buffer(config, cur, use_history=False) -> (tuple, list):
 
     if turns % 2 == 1:  # balck turn
         value = -value
-    
+
     v = value
     data = [history[0]]
     for i in range(turns):
