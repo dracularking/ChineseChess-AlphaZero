@@ -45,18 +45,10 @@ class CChessModel:
             with self.session.as_default():
                 mc = self.config.model
 
-                # Check if GPU is available
-                gpu_available = len(tf.config.experimental.list_physical_devices('GPU')) > 0
-
-                # Use channels_first for GPU, channels_last for CPU
-                if gpu_available:
-                    data_format = "channels_first"
-                    input_shape = (14, 10, 9)  # (batch, channels, height, width)
-                    bn_axis = 1
-                else:
-                    data_format = "channels_last"
-                    input_shape = (10, 9, 14)  # (batch, height, width, channels)
-                    bn_axis = -1
+                # Force channels_last format to match existing models
+                data_format = "channels_last"
+                input_shape = (10, 9, 14)  # (batch, height, width, channels)
+                bn_axis = -1
 
                 # Store the data format for later use
                 self.data_format = data_format

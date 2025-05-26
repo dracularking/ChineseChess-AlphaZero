@@ -8,7 +8,7 @@ class EvaluateConfig:
         self.tau_decay_rate = 0
         self.noise_eps = 0.2
         self.max_game_length = 100
-        self.max_processes = 2 
+        self.max_processes = 2
         self.search_threads = 10
 
     def update_play_config(self, pc):
@@ -54,7 +54,7 @@ class TrainerConfig:
         self.min_data_size_to_learn = 0
         self.cleaning_processes = 1
         self.vram_frac = 1.0
-        self.batch_size = 2 
+        self.batch_size = 2
         self.epoch_to_checkpoint = 1
         self.dataset_size = 100000
         self.start_total_steps = 0

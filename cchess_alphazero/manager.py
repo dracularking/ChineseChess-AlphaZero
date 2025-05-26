@@ -8,7 +8,7 @@ from cchess_alphazero.config import Config, PlayWithHumanConfig
 
 logger = getLogger(__name__)
 
-CMD_LIST = ['self', 'opt', 'eval', 'play', 'eval', 'sl', 'ob']
+CMD_LIST = ['self', 'opt', 'eval', 'play', 'eval', 'sl', 'ob', 'evolve']
 PIECE_STYLE_LIST = ['WOOD', 'POLISH', 'DELICATE']
 BG_STYLE_LIST = ['CANVAS', 'DROPS', 'GREEN', 'QIANHONG', 'SHEET', 'SKELETON', 'WHITE', 'WOOD']
 RANDOM_LIST = ['none', 'small', 'medium', 'large']
@@ -21,7 +21,7 @@ def create_parser():
     parser.add_argument("--total-step", help="set TrainerConfig.start_total_steps", type=int)
     parser.add_argument("--ai-move-first", help="set human or AI move first", action="store_true")
     parser.add_argument("--cli", help="play with AI with CLI, default with GUI", action="store_true")
-    parser.add_argument("--gpu", help="device list", default="0")
+    parser.add_argument("--gpu", help="device list")
     parser.add_argument("--onegreen", help="train sl work with onegreen data", action="store_true")
     parser.add_argument("--skip", help="skip games", default=0, type=int)
     parser.add_argument("--ucci", help="play with ucci engine instead of self play", action="store_true")
@@ -30,13 +30,16 @@ def create_parser():
     parser.add_argument("--random", help="choose a style of randomness", choices=RANDOM_LIST, default="none")
     parser.add_argument("--distributed", help="whether upload/download file from remote server", action="store_true")
     parser.add_argument("--elo", help="whether to compute elo score", action="store_true")
+    parser.add_argument("--max-iterations", help="maximum iterations for evolve command", type=int, default=0)
+    parser.add_argument("--skip-eval", help="skip evaluation step in evolve command", action="store_true")
     return parser
 
 def setup(config: Config, args):
     config.opts.new = args.new
     if args.total_step is not None:
         config.trainer.start_total_steps = args.total_step
-    config.opts.device_list = args.gpu
+    # 设置GPU设备列表，如果没有指定则使用默认值"0"
+    config.opts.device_list = args.gpu if args.gpu is not None else "0"
     config.resource.create_directories()
     if args.cmd == 'self':
         setup_logger(config.resource.main_log_path)
@@ -48,6 +51,8 @@ def setup(config: Config, args):
         setup_logger(config.resource.eval_log_path)
     elif args.cmd == 'sl':
         setup_logger(config.resource.sl_log_path)
+    elif args.cmd == 'evolve':
+        setup_logger(config.resource.main_log_path)
 
 def start():
     parser = create_parser()
@@ -108,10 +113,16 @@ def start():
         else:
             from cchess_alphazero.worker import sl
             sl.start(config)
-        
+
     elif args.cmd == 'ob':
         from cchess_alphazero.play_games import ob_self_play
         pwhc = PlayWithHumanConfig()
         pwhc.update_play_config(config.play)
         ob_self_play.start(config, args.ucci, args.ai_move_first)
-        
+    elif args.cmd == 'evolve':
+        from cchess_alphazero.worker import evolve
+        # 检查是否明确指定了GPU参数
+        # 如果指定了--gpu则全程使用GPU，否则使用混合模式（self用GPU，opt用CPU）
+        use_gpu = args.gpu is not None
+        return evolve.start(config, args.max_iterations, args.skip_eval, use_gpu)
+

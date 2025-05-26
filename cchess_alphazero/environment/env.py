@@ -96,18 +96,15 @@ class CChessEnv:
         planes = self.fen_to_planes(state, data_format)
         return planes
 
-    def fen_to_planes(self, fen, data_format="channels_first"):
+    def fen_to_planes(self, fen, data_format="channels_last"):
         '''
         e.g.
             rkemsmekr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RKEMSMEKR r - - 0 1
             rkemsmek1/8r/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RKEMSMEKR b - - 0 1
         '''
-        # Check if GPU is available
-        gpu_available = len(tf.config.experimental.list_physical_devices('GPU')) > 0
-
-        # Use channels_first for GPU, channels_last for CPU
+        # Force channels_last format to match existing models
         if data_format == "auto":
-            data_format = "channels_first" if gpu_available else "channels_last"
+            data_format = "channels_last"
 
         if data_format == "channels_first":
             planes = np.zeros(shape=(14, 10, 9), dtype=np.float32)

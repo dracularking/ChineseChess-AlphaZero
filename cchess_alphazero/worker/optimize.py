@@ -184,6 +184,15 @@ class OptimizeWorker:
         state_ary1 = np.asarray(state_ary, dtype=np.float32)
         policy_ary1 = np.asarray(policy_ary, dtype=np.float32)
         value_ary1 = np.asarray(value_ary, dtype=np.float32)
+
+        # Check if we need to convert from channels_first to channels_last
+        if len(state_ary1.shape) == 4 and state_ary1.shape[1] == 14:
+            # Data is in channels_first format (batch, channels, height, width)
+            # Convert to channels_last format (batch, height, width, channels)
+            logger.debug(f"Converting data from channels_first {state_ary1.shape} to channels_last")
+            state_ary1 = np.transpose(state_ary1, (0, 2, 3, 1))
+            logger.debug(f"Converted data shape: {state_ary1.shape}")
+
         return state_ary1, policy_ary1, value_ary1
 
     def load_model(self):
@@ -285,11 +294,8 @@ def convert_to_trainging_data(data, history):
     value_list = []
     i = 0
 
-    # Check if GPU is available
-    gpu_available = len(tf.config.experimental.list_physical_devices('GPU')) > 0
-
-    # Use channels_first for GPU, channels_last for CPU
-    data_format = "channels_first" if gpu_available else "channels_last"
+    # Force channels_last format to match existing models
+    data_format = "channels_last"
 
     for state, policy, value in data:
         if history is None:
@@ -303,9 +309,19 @@ def convert_to_trainging_data(data, history):
         value_list.append(sl_value)
         i += 1
 
-    return np.asarray(state_list, dtype=np.float32), \
-           np.asarray(policy_list, dtype=np.float32), \
-           np.asarray(value_list, dtype=np.float32)
+    state_array = np.asarray(state_list, dtype=np.float32)
+    policy_array = np.asarray(policy_list, dtype=np.float32)
+    value_array = np.asarray(value_list, dtype=np.float32)
+
+    # Check if we need to convert from channels_first to channels_last
+    if len(state_array.shape) == 4 and state_array.shape[1] == 14:
+        # Data is in channels_first format (batch, channels, height, width)
+        # Convert to channels_last format (batch, height, width, channels)
+        logger.debug(f"Converting data from channels_first {state_array.shape} to channels_last")
+        state_array = np.transpose(state_array, (0, 2, 3, 1))
+        logger.debug(f"Converted data shape: {state_array.shape}")
+
+    return state_array, policy_array, value_array
 
 def build_policy(action, flip):
     labels_n = len(ActionLabelsRed)

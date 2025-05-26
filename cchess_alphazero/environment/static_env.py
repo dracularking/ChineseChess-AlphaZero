@@ -134,7 +134,7 @@ def state_to_board(state):
             x = x + 1
     return board
 
-def state_to_planes(state, data_format="channels_first"):
+def state_to_planes(state, data_format="channels_last"):
     '''
     e.g.
         rkemsmekr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RKEMSMEKR
@@ -170,7 +170,7 @@ def state_to_planes(state, data_format="channels_first"):
                     j += int(letter)
     return planes
 
-def state_history_to_planes(state, history, data_format="channels_first"):
+def state_history_to_planes(state, history, data_format="channels_last"):
     '''
     e.g.
         rkemsmekr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RKEMSMEKR
