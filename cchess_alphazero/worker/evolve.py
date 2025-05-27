@@ -13,7 +13,7 @@ from cchess_alphazero.worker import self_play, optimize, evaluator
 logger = getLogger(__name__)
 
 class EvolutionWorker:
-    def __init__(self, config: Config, max_iterations=0, skip_eval=False, use_gpu=False):
+    def __init__(self, config: Config, max_iterations=0, skip_eval=False, use_gpu=False, force_gpu_opt=False):
         """
         初始化进化工作器
 
@@ -21,15 +21,20 @@ class EvolutionWorker:
             config: 配置对象
             max_iterations: 最大迭代次数，0表示无限循环
             skip_eval: 是否跳过评估步骤
-            use_gpu: 是否使用GPU训练（默认混合模式：self用GPU，opt用CPU）
+            use_gpu: 是否使用GPU进行self-play（默认混合模式：self用GPU，opt用CPU）
+            force_gpu_opt: 是否强制optimization也使用GPU（默认False，总是用CPU）
         """
         self.config = config
         self.max_iterations = max_iterations
         self.skip_eval = skip_eval
         self.use_gpu = use_gpu
+        self.force_gpu_opt = force_gpu_opt
         self.current_iteration = 0
         self.should_stop = False
         self.start_time = None
+
+        # 检测配置类型（通过文件数量判断）
+        self.is_large_config = self._detect_large_config()
 
         # 默认混合模式：self-play用GPU，optimize用CPU
         # 不在初始化时设置CPU环境，而是在具体步骤中动态设置
@@ -39,6 +44,16 @@ class EvolutionWorker:
         # Windows上不支持SIGTERM，只在非Windows系统上注册
         if os.name != 'nt':
             signal.signal(signal.SIGTERM, self._signal_handler)
+
+    def _detect_large_config(self):
+        """检测是否为大型配置（normal/distribute）"""
+        try:
+            max_files = getattr(self.config.play_data, 'max_file_num', 10)
+            # 如果最大文件数大于200，认为是大型配置（normal/distribute有300个文件）
+            # mini配置现在有100个文件，仍然使用混合模式
+            return max_files > 200
+        except:
+            return False
 
     def _setup_cpu_training(self):
         """设置CPU训练环境"""
@@ -65,44 +80,95 @@ class EvolutionWorker:
     def _setup_gpu_for_selfplay(self):
         """设置GPU环境用于自我对弈"""
         import os
-        if not self.use_gpu:  # 混合模式下，self-play使用GPU
+        if not self.use_gpu:  # 混合模式下，检查是否应该使用GPU
+            # 检查配置类型，如果是大型配置（normal/distribute），使用CPU避免GPU冲突
+            if self.is_large_config:
+                logger.info("检测到大型配置（normal/distribute），使用CPU进行self-play以避免GPU冲突...")
+                # 为大型配置强制使用CPU
+                self._setup_cpu_for_selfplay()
+                return
+
+            # 对于mini配置，使用GPU进行self-play
             logger.info("设置GPU环境用于自我对弈...")
+
             # 清除CPU强制设置，允许使用GPU
             if 'CUDA_VISIBLE_DEVICES' in os.environ and os.environ['CUDA_VISIBLE_DEVICES'] == '-1':
                 del os.environ['CUDA_VISIBLE_DEVICES']
+
+            # 清除其他CPU强制设置
+            if 'TF_FORCE_GPU_ALLOW_GROWTH' in os.environ:
+                del os.environ['TF_FORCE_GPU_ALLOW_GROWTH']
+
             # 恢复GPU设备列表
             if hasattr(self.config.opts, 'device_list'):
                 self.config.opts.device_list = '0'  # 使用GPU 0
+
+            # 清理TensorFlow会话以应用新设置
+            try:
+                from tensorflow.keras import backend as K
+                K.clear_session()
+                logger.info("已清理TensorFlow会话以应用GPU设置")
+            except Exception as e:
+                logger.warning(f"清理TensorFlow会话失败: {e}")
+
             logger.info("GPU环境设置完成（用于自我对弈）")
+
+    def _setup_cpu_for_selfplay(self):
+        """设置CPU环境用于自我对弈（normal/distribute配置）"""
+        import os
+        logger.info("设置CPU环境用于自我对弈（避免GPU冲突）...")
+
+        # 设置环境变量强制使用CPU
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'false'
+
+        # 修改配置以适应CPU
+        self.config.opts.device_list = ''
+        self.config.opts.use_multiple_gpus = False
+
+        # 清理TensorFlow会话
+        try:
+            from tensorflow.keras import backend as K
+            K.clear_session()
+            K.set_image_data_format('channels_last')
+            logger.info("已设置CPU环境用于自我对弈")
+        except Exception as e:
+            logger.warning(f"设置CPU环境失败: {e}")
+
+        logger.info("CPU环境设置完成（用于自我对弈）")
 
     def _setup_cpu_for_optimize(self):
         """设置CPU环境用于模型优化"""
         import os
         logger.info("设置CPU环境用于模型优化...")
 
-        # 设置环境变量强制使用CPU
+        # 设置环境变量强制使用CPU（必须在TensorFlow初始化之前设置）
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'false'
 
         # 修改配置以适应CPU训练
         self.config.opts.device_list = ''
+        self.config.opts.use_multiple_gpus = False
 
-        # 重置TensorFlow会话以应用CPU设置
+        # 清理TensorFlow会话和图
         try:
             import tensorflow as tf
+            # 清理默认图
             if hasattr(tf, 'reset_default_graph'):
                 tf.reset_default_graph()
-            logger.info("已重置TensorFlow图以应用CPU设置")
-        except Exception as e:
-            logger.warning(f"重置TensorFlow图失败: {e}")
 
-        # 设置数据格式为channels_first（CPU训练推荐）
-        try:
+            # 清理Keras会话
             from tensorflow.keras import backend as K
-            K.set_image_data_format('channels_first')
-            logger.info("已设置数据格式为channels_first（优化阶段）")
+            K.clear_session()
+
+            # 设置数据格式为channels_last（与现有模型兼容）
+            K.set_image_data_format('channels_last')
+
+            logger.info("已清理TensorFlow会话并设置CPU模式")
         except Exception as e:
-            logger.warning(f"设置数据格式失败: {e}")
+            logger.warning(f"清理TensorFlow会话失败: {e}")
 
         logger.info("CPU环境设置完成（用于模型优化）")
 
@@ -120,10 +186,16 @@ class EvolutionWorker:
         logger.info(f"配置类型: {self.config.__class__.__module__}")
         logger.info(f"最大迭代次数: {'无限' if self.max_iterations == 0 else self.max_iterations}")
         logger.info(f"跳过评估: {'是' if self.skip_eval else '否'}")
-        if self.use_gpu:
-            logger.info(f"训练模式: 全GPU模式")
+
+        # 根据配置类型显示训练模式
+        if self.force_gpu_opt:
+            logger.info(f"训练模式: 全GPU模式（self-play和optimize都用GPU）")
+        elif self.is_large_config:
+            logger.info(f"训练模式: 全CPU模式（大型配置避免GPU冲突）")
         else:
-            logger.info(f"训练模式: 混合模式（self-play用GPU，optimize用CPU）")
+            selfplay_device = "GPU" if self.use_gpu and not self.is_large_config else "CPU"
+            logger.info(f"训练模式: 混合模式（self-play用{selfplay_device}，optimize用CPU）")
+
         logger.info(f"开始时间: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 60)
 
@@ -248,8 +320,12 @@ class EvolutionWorker:
             try:
                 sp_module.start(self.config)
             except Exception as e:
-                self_play_exception = e
-                logger.error(f"自我对弈线程异常: {e}")
+                # 过滤掉线程池关闭后的正常错误
+                if "cannot schedule new futures after shutdown" in str(e):
+                    logger.debug(f"自我对弈线程正常结束: {e}")
+                else:
+                    self_play_exception = e
+                    logger.error(f"自我对弈线程异常: {e}")
 
         # 启动自我对弈线程
         self_play_thread = threading.Thread(target=run_self_play, daemon=True)
@@ -259,9 +335,10 @@ class EvolutionWorker:
         start_time = time.time()
         check_interval = 3  # 每3秒检查一次
         max_wait_time = 1800  # 最多等待30分钟
-        last_file_count = len(get_game_data_filenames(self.config.resource))
+        initial_file_count = len(get_game_data_filenames(self.config.resource))
+        last_file_count = initial_file_count
 
-        logger.info(f"[第{self.current_iteration}轮] 开始监控文件生成，当前: {last_file_count}, 目标: {target_files}")
+        logger.info(f"[第{self.current_iteration}轮] 开始监控文件生成，当前: {initial_file_count}, 目标: {target_files}")
 
         while not stop_flag.is_set():
             time.sleep(check_interval)
@@ -284,11 +361,12 @@ class EvolutionWorker:
 
             # 检查文件数量
             current_file_count = len(get_game_data_filenames(self.config.resource))
-            generated_files = current_file_count - (last_file_count - needed_files)
+            # 修正计算逻辑：本轮生成的文件数 = 当前文件数 - 初始文件数
+            generated_this_round = current_file_count - initial_file_count
 
             if current_file_count != last_file_count:
                 logger.info(f"[第{self.current_iteration}轮] 文件生成进度: {current_file_count}/{target_files} "
-                           f"(本轮已生成: {max(0, generated_files)})")
+                           f"(本轮已生成: {max(0, generated_this_round)})")
                 last_file_count = current_file_count
 
             # 如果达到目标文件数量，停止监控
@@ -298,20 +376,30 @@ class EvolutionWorker:
 
         # 记录最终状态
         final_file_count = len(get_game_data_filenames(self.config.resource))
-        logger.info(f"[第{self.current_iteration}轮] 自我对弈监控结束，最终文件数: {final_file_count}")
+        final_generated = final_file_count - initial_file_count
+        logger.info(f"[第{self.current_iteration}轮] 自我对弈监控结束，最终文件数: {final_file_count} (本轮生成: {max(0, final_generated)})")
 
-        # 注意：我们不能强制终止自我对弈进程，因为它们在独立的进程池中运行
-        # 但是我们已经达到了目标，可以继续下一步优化
-        # 自我对弈进程会在后台继续运行，但新生成的文件会替换旧文件
+        # 等待自我对弈线程结束（最多等待5秒）
+        if self_play_thread.is_alive():
+            logger.info(f"[第{self.current_iteration}轮] 等待自我对弈线程结束...")
+            self_play_thread.join(timeout=5)
+            if self_play_thread.is_alive():
+                logger.warning(f"[第{self.current_iteration}轮] 自我对弈线程未能及时结束，继续执行")
+
+        # 注意：自我对弈进程可能在后台继续运行，但我们已经达到了目标
+        # 新生成的文件会替换旧文件，不会影响训练过程
 
     def _run_optimize(self):
-        """运行模型优化（使用CPU）"""
+        """运行模型优化（默认使用CPU以避免GPU错误）"""
         try:
-            logger.info(f"[第{self.current_iteration}轮] 步骤2: 开始优化模型（CPU模式）...")
+            # 决定优化使用的设备
+            use_cpu_for_opt = not self.force_gpu_opt  # 除非强制使用GPU，否则总是用CPU
+            device_name = "CPU" if use_cpu_for_opt else "GPU"
+            logger.info(f"[第{self.current_iteration}轮] 步骤2: 开始优化模型（{device_name}模式）...")
             step_start_time = time.time()
 
-            # 设置CPU环境用于优化
-            if not self.use_gpu:  # 只有在混合模式下才设置CPU
+            # 设置CPU环境用于优化（除非强制使用GPU）
+            if use_cpu_for_opt:
                 self._setup_cpu_for_optimize()
 
             # 检查训练数据是否足够
@@ -430,7 +518,7 @@ class EvolutionWorker:
         logger.info("=" * 60)
 
 
-def start(config: Config, max_iterations=0, skip_eval=False, use_gpu=False):
+def start(config: Config, max_iterations=0, skip_eval=False, use_gpu=False, force_gpu_opt=False):
     """
     启动自我进化训练
 
@@ -438,7 +526,8 @@ def start(config: Config, max_iterations=0, skip_eval=False, use_gpu=False):
         config: 配置对象
         max_iterations: 最大迭代次数，0表示无限循环
         skip_eval: 是否跳过评估步骤
-        use_gpu: 是否使用GPU训练（默认使用CPU）
+        use_gpu: 是否使用GPU进行self-play（默认混合模式：self用GPU，opt用CPU）
+        force_gpu_opt: 是否强制optimization也使用GPU（默认False，总是用CPU）
     """
-    worker = EvolutionWorker(config, max_iterations, skip_eval, use_gpu)
+    worker = EvolutionWorker(config, max_iterations, skip_eval, use_gpu, force_gpu_opt)
     return worker.start()

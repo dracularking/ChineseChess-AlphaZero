@@ -73,7 +73,7 @@ Evaluate over, next generation win 0.5/1 = 50.00%
 ```bash
 # 完整训练循环
 python cchess_alphazero/run.py self --type mini --gpu 0
-python cchess_alphazero/run.py opt --type mini --gpu 0
+python cchess_alphazero/run.py opt --type mini --cpu
 python cchess_alphazero/run.py eval --type mini --gpu 0
 ```
 

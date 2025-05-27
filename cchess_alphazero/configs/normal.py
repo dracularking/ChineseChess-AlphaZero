@@ -8,7 +8,7 @@ class EvaluateConfig:
         self.tau_decay_rate = 0
         self.noise_eps = 0.2
         self.max_game_length = 200
-        self.max_processes = 10
+        self.max_processes = 2  # 减少进程数避免GPU冲突
         self.search_threads = 8
         self.next_generation_replace_rate = 0.55
 
@@ -33,8 +33,8 @@ class PlayDataConfig:
 
 class PlayConfig:
     def __init__(self):
-        self.max_processes = 10
-        self.search_threads = 40
+        self.max_processes = 2  # 减少进程数避免GPU冲突
+        self.search_threads = 20  # 相应减少线程数
         self.vram_frac = 1.0
         self.simulation_num_per_move = 800
         self.thinking_loop = 1
@@ -54,7 +54,7 @@ class PlayConfig:
 
 class TrainerConfig:
     def __init__(self):
-        self.min_games_to_begin_learn = 200 
+        self.min_games_to_begin_learn = 200
         self.min_data_size_to_learn = 0
         self.cleaning_processes = 4 # RAM explosion...
         self.vram_frac = 1.0

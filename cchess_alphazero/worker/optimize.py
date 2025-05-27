@@ -33,7 +33,19 @@ from tensorflow.keras import backend as K
 logger = getLogger(__name__)
 
 def start(config: Config):
-    set_session_config(per_process_gpu_memory_fraction=1, allow_growth=True, device_list=config.opts.device_list)
+    # 如果device_list为空，强制使用CPU
+    if config.opts.device_list == "":
+        import os
+        logger.info("强制使用CPU进行优化训练...")
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'false'
+        # 设置CPU会话配置
+        set_session_config(per_process_gpu_memory_fraction=None, allow_growth=None, device_list='')
+    else:
+        # 使用GPU配置
+        set_session_config(per_process_gpu_memory_fraction=1, allow_growth=True, device_list=config.opts.device_list)
+
     return OptimizeWorker(config).start()
 
 class OptimizeWorker:

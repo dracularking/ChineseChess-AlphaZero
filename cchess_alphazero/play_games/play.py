@@ -119,7 +119,8 @@ class PlayWithHuman:
         ai_worker.start()
 
         while not self.env.board.is_end():
-            for event in pygame.event.get():
+            event_list = pygame.event.get()
+            for event in event_list:
                 if event.type == pygame.QUIT:
                     self.env.board.print_record()
                     self.ai.close(wait=False)
@@ -148,7 +149,7 @@ class PlayWithHuman:
                                         current_chessman = chessman_sprite
                                         chessman_sprite.is_selected = True
                                     else:
-                                        move = str(current_chessman.chessman.col_num) + str(current_chessman.chessman.row_num) +\
+                                        move = str(current_chessman.chessman.col_num) + str(current_chessman.chessman.row_num) + \
                                                str(col_num) + str(row_num)
                                         success = current_chessman.move(col_num, row_num, self.chessman_w, self.chessman_h)
                                         self.history.append(move)
@@ -159,7 +160,7 @@ class PlayWithHuman:
                                             current_chessman = None
                                             self.history.append(self.env.get_state())
                                 elif current_chessman != None and chessman_sprite is None:
-                                    move = str(current_chessman.chessman.col_num) + str(current_chessman.chessman.row_num) +\
+                                    move = str(current_chessman.chessman.col_num) + str(current_chessman.chessman.row_num) + \
                                            str(col_num) + str(row_num)
                                     success = current_chessman.move(col_num, row_num, self.chessman_w, self.chessman_h)
                                     self.history.append(move)
@@ -402,5 +403,9 @@ def select_sprite_from_group(sprite_group, col_num, row_num):
     return None
 
 def translate_hit_area(screen_x, screen_y, w=80, h = 80):
-    return screen_x // w, 9 - screen_y // h
+    print(f"screen_x: {screen_x}, screen_y: {screen_y}, w: {w}, h: {h}")
+    col_num = screen_x // w
+    row_num = 9 - screen_y // h
+    print(f"col_num: {col_num}, row_num: {row_num}")
+    return col_num, row_num
 

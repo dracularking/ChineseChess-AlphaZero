@@ -32,14 +32,26 @@ def create_parser():
     parser.add_argument("--elo", help="whether to compute elo score", action="store_true")
     parser.add_argument("--max-iterations", help="maximum iterations for evolve command", type=int, default=0)
     parser.add_argument("--skip-eval", help="skip evaluation step in evolve command", action="store_true")
+    parser.add_argument("--force-gpu-opt", help="force optimization to use GPU (default: always use CPU for stability)", action="store_true")
+    parser.add_argument("--cpu", help="force CPU-only training (for opt command)", action="store_true")
     return parser
 
 def setup(config: Config, args):
     config.opts.new = args.new
     if args.total_step is not None:
         config.trainer.start_total_steps = args.total_step
-    # 设置GPU设备列表，如果没有指定则使用默认值"0"
-    config.opts.device_list = args.gpu if args.gpu is not None else "0"
+
+    # 处理设备选择逻辑
+    if hasattr(args, 'cpu') and args.cpu:
+        # 强制使用CPU
+        config.opts.device_list = ""
+        config.opts.use_multiple_gpus = False
+    elif args.gpu is not None:
+        # 使用指定的GPU
+        config.opts.device_list = args.gpu
+    else:
+        # 默认使用GPU 0
+        config.opts.device_list = "0"
     config.resource.create_directories()
     if args.cmd == 'self':
         setup_logger(config.resource.main_log_path)
@@ -121,8 +133,11 @@ def start():
         ob_self_play.start(config, args.ucci, args.ai_move_first)
     elif args.cmd == 'evolve':
         from cchess_alphazero.worker import evolve
-        # 检查是否明确指定了GPU参数
-        # 如果指定了--gpu则全程使用GPU，否则使用混合模式（self用GPU，opt用CPU）
-        use_gpu = args.gpu is not None
-        return evolve.start(config, args.max_iterations, args.skip_eval, use_gpu)
+        # 新的逻辑：
+        # - 默认混合模式：self-play用GPU（默认），optimize用CPU（稳定）
+        # - use_gpu控制self-play是否使用GPU（默认True，除非明确禁用）
+        # - force_gpu_opt控制optimize是否强制使用GPU（默认False）
+        use_gpu = True  # 默认self-play使用GPU（混合模式）
+        force_gpu_opt = args.force_gpu_opt  # 只有明确指定--force-gpu-opt才强制optimize用GPU
+        return evolve.start(config, args.max_iterations, args.skip_eval, use_gpu, force_gpu_opt)
 
