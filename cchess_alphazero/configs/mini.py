@@ -26,7 +26,7 @@ class PlayDataConfig:
     def __init__(self):
         self.sl_nb_game_in_file = 250
         self.nb_game_in_file = 1
-        self.max_file_num = 100  # 提升到100个文件，提供更多训练数据
+        self.max_file_num = 1000  # 提升到1000个文件，提供更多训练数据
         self.nb_game_save_record = 1
 
 
