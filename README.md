@@ -43,7 +43,7 @@ python cchess_alphazero/run.py self --type mini --gpu 0
 ### 步骤2：训练模型
 
 ```bash
-python cchess_alphazero/run.py opt --type mini --gpu 0
+python cchess_alphazero/run.py opt --type mini --cpu
 ```
 
 训练会使用自我对弈的数据优化模型，新模型保存在 `data/model` 目录。
