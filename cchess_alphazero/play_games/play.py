@@ -48,6 +48,12 @@ class PlayWithHuman:
         self.screen_width = 720
         self.height = 577
         self.width = 521
+        
+        # 初始化音效
+        self.sounds_enabled = True
+        self.click_sound = None
+        self.drop_sound = None
+        self.init_sounds()
         self.chessman_w = 57
         self.chessman_h = 57
         self.disp_record_num = 15
@@ -58,6 +64,43 @@ class PlayWithHuman:
         if self.config.opts.bg_style == 'WOOD':
             self.chessman_w += 1
             self.chessman_h += 1
+    
+    def init_sounds(self):
+        """初始化音效"""
+        try:
+            pygame.mixer.init()
+            sounds_dir = os.path.join(main_dir, "sounds")
+            click_sound_path = os.path.join(sounds_dir, "click.wav")
+            drop_sound_path = os.path.join(sounds_dir, "drop.wav")
+            
+            if os.path.exists(click_sound_path):
+                self.click_sound = pygame.mixer.Sound(click_sound_path)
+                self.click_sound.set_volume(0.5)  # 设置音量为50%
+            
+            if os.path.exists(drop_sound_path):
+                self.drop_sound = pygame.mixer.Sound(drop_sound_path)
+                self.drop_sound.set_volume(0.7)  # 设置音量为70%
+                
+            logger.info("音效初始化成功")
+        except Exception as e:
+            logger.warning(f"音效初始化失败: {e}")
+            self.sounds_enabled = False
+    
+    def play_click_sound(self):
+        """播放点击音效"""
+        if self.sounds_enabled and self.click_sound:
+            try:
+                self.click_sound.play()
+            except Exception as e:
+                logger.warning(f"播放点击音效失败: {e}")
+    
+    def play_drop_sound(self):
+        """播放落子音效"""
+        if self.sounds_enabled and self.drop_sound:
+            try:
+                self.drop_sound.play()
+            except Exception as e:
+                logger.warning(f"播放落子音效失败: {e}")
 
     def load_model(self):
         self.model = CChessModel(self.config)
@@ -143,11 +186,13 @@ class PlayWithHuman:
                                     if chessman_sprite.chessman.is_red == self.env.red_to_move:
                                         current_chessman = chessman_sprite
                                         chessman_sprite.is_selected = True
+                                        self.play_click_sound()  # 播放点击音效
                                 elif current_chessman != None and chessman_sprite != None:
                                     if chessman_sprite.chessman.is_red == self.env.red_to_move:
                                         current_chessman.is_selected = False
                                         current_chessman = chessman_sprite
                                         chessman_sprite.is_selected = True
+                                        self.play_click_sound()  # 播放点击音效
                                     else:
                                         move = str(current_chessman.chessman.col_num) + str(current_chessman.chessman.row_num) + \
                                                str(col_num) + str(row_num)
@@ -159,6 +204,7 @@ class PlayWithHuman:
                                             current_chessman.is_selected = False
                                             current_chessman = None
                                             self.history.append(self.env.get_state())
+                                            self.play_drop_sound()  # 播放落子音效
                                 elif current_chessman != None and chessman_sprite is None:
                                     move = str(current_chessman.chessman.col_num) + str(current_chessman.chessman.row_num) + \
                                            str(col_num) + str(row_num)
@@ -168,6 +214,7 @@ class PlayWithHuman:
                                         current_chessman.is_selected = False
                                         current_chessman = None
                                         self.history.append(self.env.get_state())
+                                        self.play_drop_sound()  # 播放落子音效
 
             self.draw_widget(screen, widget_background)
             framerate.tick(20)
@@ -242,6 +289,7 @@ class PlayWithHuman:
                     sprite_dest.kill()
                 chessman_sprite.move(x1, y1, self.chessman_w, self.chessman_h)
                 self.history.append(self.env.get_state())
+                self.play_drop_sound()  # AI落子音效
 
     def draw_widget(self, screen, widget_background):
         white_rect = Rect(0, 0, self.screen_width - self.width, self.height)

@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 ```bash
 # GUI界面对弈
-python cchess_alphazero/run.py play --type mini --gpu 0
+python cchess_alphazero/run.py play --gpu 0
 
 # 命令行界面对弈
 python cchess_alphazero/run.py play --cli --type mini --gpu 0
