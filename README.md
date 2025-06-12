@@ -10,9 +10,10 @@
 pip install -r requirements.txt
 ```
 
-* Python 3.7.9
-* CUDA: 10.0
-* cuDNN 7.6.5 for CUDA 10.0
+* Python 3.10.11
+* CUDA: 11.8
+* cuDNN: 8.9.0
+
 
 
 ## 1. 与AI对弈
@@ -43,7 +44,7 @@ python cchess_alphazero/run.py self --type mini --gpu 0
 ### 步骤2：训练模型
 
 ```bash
-python cchess_alphazero/run.py opt --type mini --cpu
+python cchess_alphazero/run.py opt --type mini --gpu 0
 ```
 
 训练会使用自我对弈的数据优化模型，新模型保存在 `data/model` 目录。

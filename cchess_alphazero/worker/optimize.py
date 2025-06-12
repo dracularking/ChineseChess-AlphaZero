@@ -27,7 +27,8 @@ from cchess_alphazero.lib.web_helper import http_request
 
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.callbacks import TensorBoard
-from tensorflow.keras.utils import multi_gpu_model
+# multi_gpu_model is deprecated in TensorFlow 2.x
+# from tensorflow.keras.utils import multi_gpu_model
 from tensorflow.keras import backend as K
 
 logger = getLogger(__name__)
@@ -122,37 +123,31 @@ class OptimizeWorker:
         tc = self.config.trainer
         state_ary, policy_ary, value_ary = self.collect_all_loaded_data()
 
-        # 确保在模型的图和会话中训练模型
-        with self.model.graph.as_default():
-            with self.model.session.as_default():
-                if self.config.opts.use_multiple_gpus:
-                    self.mg_model.fit(state_ary, [policy_ary, value_ary],
-                                     batch_size=tc.batch_size,
-                                     epochs=epochs,
-                                     shuffle=True,
-                                     validation_split=0.02)
-                else:
-                    self.model.model.fit(state_ary, [policy_ary, value_ary],
-                                     batch_size=tc.batch_size,
-                                     epochs=epochs,
-                                     shuffle=True,
-                                     validation_split=0.02)
+        # TensorFlow 2.x uses eager execution by default, no need for graph/session
+        # Use single model for training (multi-GPU support disabled)
+        self.model.model.fit(state_ary, [policy_ary, value_ary],
+                         batch_size=tc.batch_size,
+                         epochs=epochs,
+                         shuffle=True,
+                         validation_split=0.02)
         steps = (state_ary.shape[0] // tc.batch_size) * epochs
         return steps
 
     def compile_model(self):
         # 使用 tf.keras 而不是独立的 keras
         from tensorflow.keras.optimizers import SGD
-        # 确保在模型的图和会话中编译模型
-        with self.model.graph.as_default():
-            with self.model.session.as_default():
-                self.opt = SGD(lr=0.02, momentum=self.config.trainer.momentum)
-                losses = ['categorical_crossentropy', 'mean_squared_error']
-                if self.config.opts.use_multiple_gpus:
-                    self.mg_model = multi_gpu_model(self.model.model, gpus=self.config.opts.gpu_num)
-                    self.mg_model.compile(optimizer=self.opt, loss=losses, loss_weights=self.config.trainer.loss_weights)
-                else:
-                    self.model.model.compile(optimizer=self.opt, loss=losses, loss_weights=self.config.trainer.loss_weights)
+        # TensorFlow 2.x uses eager execution by default, no need for graph/session
+        self.opt = SGD(lr=0.02, momentum=self.config.trainer.momentum)
+        losses = ['categorical_crossentropy', 'mean_squared_error']
+        # In TensorFlow 2.x, multi_gpu_model is deprecated
+        # Use tf.distribute.MirroredStrategy for multi-GPU training
+        if self.config.opts.use_multiple_gpus:
+            # For now, disable multi-GPU and use single GPU training
+            # TODO: Implement tf.distribute.MirroredStrategy for multi-GPU support
+            logger.warning("Multi-GPU training is temporarily disabled in TensorFlow 2.x")
+            self.model.model.compile(optimizer=self.opt, loss=losses, loss_weights=self.config.trainer.loss_weights)
+        else:
+            self.model.model.compile(optimizer=self.opt, loss=losses, loss_weights=self.config.trainer.loss_weights)
 
     def update_learning_rate(self, total_steps):
         # The deepmind paper says
@@ -162,10 +157,9 @@ class OptimizeWorker:
 
         lr = self.decide_learning_rate(total_steps)
         if lr:
-            with self.model.graph.as_default():
-                with self.model.session.as_default():
-                    K.set_value(self.opt.lr, lr)
-                    logger.debug(f"total step={total_steps}, set learning rate to {lr}")
+            # TensorFlow 2.x uses eager execution by default, no need for graph/session
+            K.set_value(self.opt.lr, lr)
+            logger.debug(f"total step={total_steps}, set learning rate to {lr}")
 
     def fill_queue(self):
         futures = deque()
@@ -244,8 +238,8 @@ class OptimizeWorker:
     def try_reload_model(self):
         logger.debug("check model")
         if need_to_reload_best_model_weight(self.model):
-            with self.model.graph.as_default():
-                load_best_model_weight(self.model)
+            # TensorFlow 2.x uses eager execution by default, no need for graph/session
+            load_best_model_weight(self.model)
             return True
         return False
 

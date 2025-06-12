@@ -155,10 +155,8 @@ class EvolutionWorker:
         # 清理TensorFlow会话和图
         try:
             import tensorflow as tf
-            # 清理默认图
-            if hasattr(tf, 'reset_default_graph'):
-                tf.reset_default_graph()
-
+            # TensorFlow 2.x 不需要手动清理默认图
+            
             # 清理Keras会话
             from tensorflow.keras import backend as K
             K.clear_session()

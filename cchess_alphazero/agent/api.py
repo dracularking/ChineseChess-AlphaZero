@@ -40,10 +40,7 @@ class CChessModelAPI:
             self.try_reload_model_from_internet()
         last_model_check_time = time()
         
-        # Initialize variables before prediction
-        with self.agent_model.graph.as_default():
-            with self.agent_model.session.as_default():
-                self.agent_model.session.run(tf.global_variables_initializer())
+        # No need to initialize variables in TensorFlow 2.x eager execution
         
         while not self.done:
             if last_model_check_time + 600 < time() and self.need_reload:
@@ -67,9 +64,7 @@ class CChessModelAPI:
             if not data:
                 continue
             data = np.asarray(data, dtype=np.float32)
-            with self.agent_model.graph.as_default():
-                with self.agent_model.session.as_default():
-                    policy_ary, value_ary = self.agent_model.model.predict_on_batch(data)
+            policy_ary, value_ary = self.agent_model.model.predict_on_batch(data)
             buf = []
             k, i = 0, 0
             for p, v in zip(policy_ary, value_ary):
