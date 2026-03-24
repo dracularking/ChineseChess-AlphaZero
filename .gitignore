@@ -7,3 +7,12 @@ logs/*
 Icon*
 .vscode
 *.icloud
+.omc/project-memory.json
+.omc/sessions/4eab1e66-172d-4d54-b813-1cb016e1fe25.json
+.omc/sessions/8c3607b5-7dfb-4867-bd77-a17123446a9b.json
+.omc/sessions/9da1016a-360b-497d-bcc5-d4f9d40e6f61.json
+.omc/sessions/500c9f82-48ad-4496-9774-5e24fcb071fa.json
+.omc/sessions/496885ae-5ffd-4b63-8af8-947d55eaee49.json
+.omc/sessions/5109654a-dc5e-4ee1-b701-ac74310e253d.json
+.omc/sessions/fb1b6d8b-e8fc-4e5e-86e9-31c6b240dbcc.json
+.omc/state/sessions/b1eadd13-b881-4938-ad4a-feda6f979e8d/skill-active-state.json

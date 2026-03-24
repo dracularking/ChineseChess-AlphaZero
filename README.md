@@ -36,7 +36,7 @@ python cchess_alphazero/run.py play --ai-move-first --type mini --gpu 0
 ### 步骤1：自我对弈生成训练数据
 
 ```bash
-python cchess_alphazero/run.py self --type mini --gpu 0
+python cchess_alphazero/run.py self --gpu 0
 ```
 
 自我对弈会在 `data/play_data` 目录下生成对弈记录。

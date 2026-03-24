@@ -1,14 +1,14 @@
-import sys
+from collections import defaultdict
 import pygame
 import random
 import os.path
 import time
 import copy
 import numpy as np
+import json
 
 from pygame.locals import *
 from logging import getLogger
-from collections import defaultdict
 from threading import Thread
 from time import sleep
 from datetime import datetime
@@ -22,8 +22,10 @@ from cchess_alphazero.agent.api import CChessModelAPI
 from cchess_alphazero.config import Config
 from cchess_alphazero.environment.env import CChessEnv
 from cchess_alphazero.environment.lookup_tables import Winner, ActionLabelsRed, flip_move
-from cchess_alphazero.lib.model_helper import load_best_model_weight
+from cchess_alphazero.lib.model_helper import load_best_model_weight, save_as_best_model
 from cchess_alphazero.lib.tf_util import set_session_config
+from cchess_alphazero.lib.data_helper import write_game_data_to_file
+from cchess_alphazero.lib.logger import getLogger
 
 logger = getLogger(__name__)
 main_dir = os.path.split(os.path.abspath(__file__))[0]
@@ -64,6 +66,59 @@ class PlayWithHuman:
         if self.config.opts.bg_style == 'WOOD':
             self.chessman_w += 1
             self.chessman_h += 1
+
+    def canonicalize_move(self, move, is_red_turn):
+        """
+        Convert a board move into the same perspective as env.get_state().
+        When black is to move, env.get_state() returns a flipped state, so the move
+        also needs to be flipped before being written to training history.
+        """
+        return move if is_red_turn else flip_move(move)
+
+    def save_human_training_data(self):
+        """
+        Export GUI human-vs-AI games into the same play_data format used by optimize.py.
+        Only the human moves are kept so the model can learn offline from human play.
+        """
+        if len(self.history) < 3:
+            logger.info("对局步数过少，跳过训练数据导出")
+            return
+
+        winner = self.env.winner or self.env.board.winner
+        if winner == Winner.red:
+            final_value = 1
+        elif winner == Winner.black:
+            final_value = -1
+        elif winner == Winner.draw:
+            final_value = 0
+        else:
+            logger.info("对局未结束，跳过训练数据导出")
+            return
+
+        human_is_red = self.human_move_first
+        data = [self.history[0]]
+        value = final_value
+
+        for idx in range(1, len(self.history), 2):
+            move_index = (idx - 1) // 2
+            is_red_turn = move_index % 2 == 0
+            move = self.history[idx]
+
+            if is_red_turn == human_is_red:
+                data.append([move, value])
+
+            value = -value
+
+        if len(data) <= 1:
+            logger.info("未收集到有效的人类走子样本，跳过训练数据导出")
+            return
+
+        rc = self.config.resource
+        os.makedirs(rc.play_data_dir, exist_ok=True)
+        game_id = datetime.now().strftime("%Y%m%d-%H%M%S.%f")
+        path = os.path.join(rc.play_data_dir, rc.play_data_filename_tmpl % game_id)
+        write_game_data_to_file(path, data)
+        logger.info(f"已导出人机对局训练数据到 {path}，样本数 = {len(data) - 1}")
     
     def init_sounds(self):
         """初始化音效"""
@@ -197,8 +252,9 @@ class PlayWithHuman:
                                         move = str(current_chessman.chessman.col_num) + str(current_chessman.chessman.row_num) + \
                                                str(col_num) + str(row_num)
                                         success = current_chessman.move(col_num, row_num, self.chessman_w, self.chessman_h)
-                                        self.history.append(move)
                                         if success:
+                                            move = self.canonicalize_move(move, self.env.red_to_move)
+                                            self.history.append(move)
                                             self.chessmans.remove(chessman_sprite)
                                             chessman_sprite.kill()
                                             current_chessman.is_selected = False
@@ -209,8 +265,9 @@ class PlayWithHuman:
                                     move = str(current_chessman.chessman.col_num) + str(current_chessman.chessman.row_num) + \
                                            str(col_num) + str(row_num)
                                     success = current_chessman.move(col_num, row_num, self.chessman_w, self.chessman_h)
-                                    self.history.append(move)
                                     if success:
+                                        move = self.canonicalize_move(move, self.env.red_to_move)
+                                        self.history.append(move)
                                         current_chessman.is_selected = False
                                         current_chessman = None
                                         self.history.append(self.env.get_state())
@@ -232,6 +289,7 @@ class PlayWithHuman:
         game_id = datetime.now().strftime("%Y%m%d-%H%M%S")
         path = os.path.join(self.config.resource.play_record_dir, self.config.resource.play_record_filename_tmpl % game_id)
         self.env.board.save_record(path)
+        self.save_human_training_data()
         sleep(3)
 
     def ai_move(self):
